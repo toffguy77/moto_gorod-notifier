@@ -39,6 +39,8 @@ docker-build:
 docker-run: docker-build
 	@echo "Starting container with LOG_LEVEL=$(LOG_LEVEL)..."
 	@mkdir -p ./data
+	@chmod 777 ./data 2>/dev/null || true
+	@chmod 666 ./data/notifier.db 2>/dev/null || true
 	@docker stop $(CONTAINER_NAME) 2>/dev/null || true
 	@docker rm $(CONTAINER_NAME) 2>/dev/null || true
 	docker run -d \
