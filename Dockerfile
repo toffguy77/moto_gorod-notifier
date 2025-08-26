@@ -38,8 +38,8 @@ RUN chmod +x ./notifier && chown notifier:notifier ./notifier
 
 USER notifier
 
-# Expose port (if needed for health checks)
-EXPOSE 8080
+# Expose port for metrics
+EXPOSE 9090
 
 # Mount point for persistent data
 VOLUME ["/data"]

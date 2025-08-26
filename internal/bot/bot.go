@@ -16,6 +16,16 @@ type Bot struct {
 	bookingURL   string
 	templateRenderer TemplateRenderer
 	storage      Storage
+	metrics      MetricsRecorder
+}
+
+type MetricsRecorder interface {
+	RecordSubscription()
+	RecordUnsubscription()
+	RecordUniqueUser()
+	RecordNotificationSent()
+	RecordError(errorType string)
+	SetActiveSubscribers(count float64)
 }
 
 type Storage interface {
@@ -98,6 +108,10 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		command := msg.Command()
 		switch command {
 		case "start":
+			// Record unique user on first interaction
+			if b.metrics != nil {
+				b.metrics.RecordUniqueUser()
+			}
 			b.addSubscriber(chatID)
 			subsCount := len(b.Subscribers())
 			b.log.InfoWithFields("User subscribed", logger.Fields{
@@ -169,12 +183,28 @@ func (b *Bot) reply(chatID int64, text string) {
 func (b *Bot) addSubscriber(chatID int64) {
 	if err := b.storage.AddSubscriber(chatID); err != nil {
 		b.log.WithError(err).Error("Failed to add subscriber")
+		if b.metrics != nil {
+			b.metrics.RecordError("subscription_failed")
+		}
+	} else {
+		if b.metrics != nil {
+			b.metrics.RecordSubscription()
+			b.metrics.SetActiveSubscribers(float64(len(b.Subscribers())))
+		}
 	}
 }
 
 func (b *Bot) removeSubscriber(chatID int64) {
 	if err := b.storage.RemoveSubscriber(chatID); err != nil {
 		b.log.WithError(err).Error("Failed to remove subscriber")
+		if b.metrics != nil {
+			b.metrics.RecordError("unsubscription_failed")
+		}
+	} else {
+		if b.metrics != nil {
+			b.metrics.RecordUnsubscription()
+			b.metrics.SetActiveSubscribers(float64(len(b.Subscribers())))
+		}
 	}
 }
 
@@ -227,10 +257,16 @@ func (b *Bot) Notify(chatID int64, text string) error {
 			"chat_id": chatID,
 			"message": text,
 		}).Error("Failed to send notification")
+		if b.metrics != nil {
+			b.metrics.RecordError("notification_failed")
+		}
 	} else {
 		b.log.InfoWithFields("Notification sent", logger.Fields{
 			"chat_id": chatID,
 		})
+		if b.metrics != nil {
+			b.metrics.RecordNotificationSent()
+		}
 	}
 	return err
 }
@@ -241,6 +277,10 @@ func (b *Bot) SetCurrentSlotsHandler(fn func() ([]string, error)) {
 
 func (b *Bot) SetTemplateRenderer(renderer TemplateRenderer) {
 	b.templateRenderer = renderer
+}
+
+func (b *Bot) SetMetrics(metrics MetricsRecorder) {
+	b.metrics = metrics
 }
 
 func (b *Bot) sendWelcomeMessage(chatID int64) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/thatguy/moto_gorod-notifier/internal/bot"
 	"github.com/thatguy/moto_gorod-notifier/internal/config"
 	"github.com/thatguy/moto_gorod-notifier/internal/logger"
+	"github.com/thatguy/moto_gorod-notifier/internal/metrics"
 	"github.com/thatguy/moto_gorod-notifier/internal/notifier"
 	"github.com/thatguy/moto_gorod-notifier/internal/storage"
 	"github.com/thatguy/moto_gorod-notifier/internal/yclients"
@@ -96,12 +98,16 @@ func main() {
 		})
 	}
 
+	// Initialize metrics
+	metrics := metrics.New()
+
 	// Initialize Telegram bot
 	tg, err := bot.New(cfg.TelegramToken, store, log.WithField("component", "telegram_bot"))
 	if err != nil {
 		log.WithError(err).Error("Failed to initialize Telegram bot")
 		os.Exit(1)
 	}
+	tg.SetMetrics(metrics)
 
 	// Update interface for all users on startup
 	if subscriberCount > 0 {
@@ -125,6 +131,20 @@ func main() {
 		LocationID: companyIDInt,
 		ServiceIDs: cfg.ServiceIDs,
 	}, store, log.WithField("component", "notifier"))
+	n.SetMetrics(metrics)
+
+	// Set initial metrics from database stats
+	metrics.SetActiveSubscribers(float64(subscriberCount))
+	metrics.SetSeenSlotsTotal(float64(seenSlotsCount))
+
+	// Start metrics HTTP server
+	go func() {
+		http.Handle("/metrics", metrics.Handler())
+		log.Info("Starting metrics server on :9090")
+		if err := http.ListenAndServe(":9090", nil); err != nil {
+			log.WithError(err).Error("Metrics server failed")
+		}
+	}()
 
 	// Set template renderer for bot
 	tg.SetTemplateRenderer(n)

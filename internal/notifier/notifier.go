@@ -26,6 +26,14 @@ type Notifier struct {
 	templates map[string]*template.Template
 	log       *logger.Logger
 	storage   Storage
+	metrics   MetricsRecorder
+}
+
+type MetricsRecorder interface {
+	RecordNewSlot()
+	ObserveSlotCheckDuration(duration float64)
+	SetSeenSlotsTotal(count float64)
+	RecordError(errorType string)
 }
 
 type Storage interface {
@@ -186,6 +194,9 @@ func (n *Notifier) checkAndNotify(ctx context.Context) {
 						n.log.WithError(err).Error("Failed to mark slot as seen")
 					}
 					newSlotsFound++
+					if n.metrics != nil {
+						n.metrics.RecordNewSlot()
+					}
 					
 					n.log.InfoWithFields("New slot found", logger.Fields{
 						"service_id": serviceID,
@@ -217,6 +228,10 @@ func (n *Notifier) checkAndNotify(ctx context.Context) {
 	}
 	
 	duration := time.Since(start)
+	if n.metrics != nil {
+		n.metrics.ObserveSlotCheckDuration(duration.Seconds())
+	}
+	
 	// Clean old slots (older than 7 days)
 	if err := n.storage.CleanOldSlots(7 * 24 * time.Hour); err != nil {
 		n.log.WithError(err).Warn("Failed to clean old slots")
@@ -226,6 +241,7 @@ func (n *Notifier) checkAndNotify(ctx context.Context) {
 		"duration":        duration.String(),
 		"new_slots_found": newSlotsFound,
 		"total_checks":    totalChecks,
+		"seen_slots":      totalChecks - newSlotsFound,
 	})
 }
 
@@ -354,4 +370,8 @@ func (n *Notifier) GetCurrentSlotsMessage(slots []string) string {
 		return n.RenderTemplate("templates/no_slots.tmpl", nil)
 	}
 	return n.RenderTemplate("templates/current_slots.tmpl", struct{ Slots []string }{Slots: slots})
+}
+
+func (n *Notifier) SetMetrics(metrics MetricsRecorder) {
+	n.metrics = metrics
 }
