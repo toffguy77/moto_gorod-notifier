@@ -189,25 +189,43 @@ func (b *Bot) Subscribers() []int64 {
 
 func (b *Bot) UpdateInterfaceForAll() {
 	subscribers := b.Subscribers()
-	text := "🔄 Бот обновлен! Новые возможности и улучшения уже доступны."
 	
 	for _, chatID := range subscribers {
 		keyboard := b.createMainKeyboard(chatID)
-		msg := tgbotapi.NewMessage(chatID, text)
+		
+		// Silent keyboard update using setChatMenuButton
+		setMenuButton := tgbotapi.SetChatMenuButtonConfig{
+			ChatID: chatID,
+			MenuButton: &tgbotapi.MenuButton{
+				Type: "default",
+			},
+		}
+		
+		// Force keyboard update by sending a message and immediately deleting it
+		msg := tgbotapi.NewMessage(chatID, "⚡")
 		msg.ReplyMarkup = keyboard
 		
-		if _, err := b.api.Send(msg); err != nil {
+		sentMsg, err := b.api.Send(msg)
+		if err != nil {
 			b.log.WithError(err).WithFields(logger.Fields{
 				"chat_id": chatID,
 			}).Error("Failed to send interface update")
-		} else {
-			b.log.InfoWithFields("Interface updated", logger.Fields{
-				"chat_id": chatID,
-			})
+			continue
 		}
+		
+		// Immediately delete the message
+		deleteMsg := tgbotapi.NewDeleteMessage(chatID, sentMsg.MessageID)
+		b.api.Request(deleteMsg)
+		
+		// Also try to set menu button
+		b.api.Request(setMenuButton)
+		
+		b.log.InfoWithFields("Interface silently updated", logger.Fields{
+			"chat_id": chatID,
+		})
 	}
 	
-	b.log.InfoWithFields("Interface update completed", logger.Fields{
+	b.log.InfoWithFields("Silent interface update completed", logger.Fields{
 		"total_users": len(subscribers),
 	})
 }
