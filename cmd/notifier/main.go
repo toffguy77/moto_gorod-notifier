@@ -85,11 +85,32 @@ func main() {
 	}
 	defer store.Close()
 
+	// Show startup statistics
+	subscriberCount, seenSlotsCount, err := store.GetStats()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get startup statistics")
+	} else {
+		log.InfoWithFields("Database statistics", logger.Fields{
+			"subscribers": subscriberCount,
+			"seen_slots":  seenSlotsCount,
+		})
+	}
+
 	// Initialize Telegram bot
 	tg, err := bot.New(cfg.TelegramToken, store, log.WithField("component", "telegram_bot"))
 	if err != nil {
 		log.WithError(err).Error("Failed to initialize Telegram bot")
 		os.Exit(1)
+	}
+
+	// Update interface for all users on startup
+	if subscriberCount > 0 {
+		log.InfoWithFields("Updating bot interface for existing users", logger.Fields{
+			"users_to_update": subscriberCount,
+		})
+		tg.UpdateInterfaceForAll()
+	} else {
+		log.Info("No existing users to update")
 	}
 
 	// Set current slots handler

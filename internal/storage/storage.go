@@ -105,6 +105,18 @@ func (s *Storage) CleanOldSlots(olderThan time.Duration) error {
 	return err
 }
 
+func (s *Storage) GetStats() (subscriberCount int, seenSlotsCount int, err error) {
+	err = s.db.QueryRow("SELECT COUNT(*) FROM subscribers").Scan(&subscriberCount)
+	if err != nil {
+		return 0, 0, err
+	}
+	err = s.db.QueryRow("SELECT COUNT(*) FROM seen_slots").Scan(&seenSlotsCount)
+	if err != nil {
+		return subscriberCount, 0, err
+	}
+	return subscriberCount, seenSlotsCount, nil
+}
+
 func (s *Storage) Close() error {
 	return s.db.Close()
 }

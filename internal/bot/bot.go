@@ -75,57 +75,78 @@ func (b *Bot) Run(ctx context.Context) {
 			}
 			if upd.Message != nil {
 				b.handleMessage(upd.Message)
-			} else if upd.CallbackQuery != nil {
-				b.handleCallbackQuery(upd.CallbackQuery)
 			}
 		}
 	}
 }
 
 func (b *Bot) handleMessage(msg *tgbotapi.Message) {
-	if !msg.IsCommand() {
-		return
-	}
-
 	chatID := msg.Chat.ID
-	command := msg.Command()
 	username := msg.From.UserName
 	firstName := msg.From.FirstName
+	text := msg.Text
 
-	b.log.InfoWithFields("Received command", logger.Fields{
-		"command":    command,
+	b.log.InfoWithFields("Received message", logger.Fields{
+		"text":       text,
 		"chat_id":    chatID,
 		"username":   username,
 		"first_name": firstName,
 	})
 
-	switch command {
-	case "start":
+	// Handle commands
+	if msg.IsCommand() {
+		command := msg.Command()
+		switch command {
+		case "start":
+			b.addSubscriber(chatID)
+			subsCount := len(b.Subscribers())
+			b.log.InfoWithFields("User subscribed", logger.Fields{
+				"chat_id":           chatID,
+				"username":          username,
+				"total_subscribers": subsCount,
+			})
+			b.sendWelcomeMessage(chatID)
+		case "current":
+			b.handleCurrentSlots(chatID)
+		case "stop":
+			b.removeSubscriber(chatID)
+			subsCount := len(b.Subscribers())
+			b.log.InfoWithFields("User unsubscribed", logger.Fields{
+				"chat_id":           chatID,
+				"username":          username,
+				"total_subscribers": subsCount,
+			})
+			b.sendGoodbyeMessage(chatID)
+
+		default:
+			b.sendHelpMessage(chatID)
+		}
+		return
+	}
+
+	// Handle button presses
+	switch text {
+	case "📅 Текущие слоты":
+		b.handleCurrentSlots(chatID)
+	case "📝 Записаться":
+		b.handleBooking(chatID)
+	case "🔔 Подписаться":
 		b.addSubscriber(chatID)
 		subsCount := len(b.Subscribers())
-		b.log.InfoWithFields("User subscribed", logger.Fields{
+		b.log.InfoWithFields("User subscribed via button", logger.Fields{
 			"chat_id":           chatID,
-			"username":          username,
 			"total_subscribers": subsCount,
 		})
 		b.sendWelcomeMessage(chatID)
-	case "current":
-		b.handleCurrentSlots(chatID)
-	case "stop":
+	case "🔕 Отписаться":
 		b.removeSubscriber(chatID)
 		subsCount := len(b.Subscribers())
-		b.log.InfoWithFields("User unsubscribed", logger.Fields{
+		b.log.InfoWithFields("User unsubscribed via button", logger.Fields{
 			"chat_id":           chatID,
-			"username":          username,
 			"total_subscribers": subsCount,
 		})
 		b.sendGoodbyeMessage(chatID)
 	default:
-		b.log.WarnWithFields("Unknown command received", logger.Fields{
-			"command":  command,
-			"chat_id":  chatID,
-			"username": username,
-		})
 		b.sendHelpMessage(chatID)
 	}
 }
@@ -164,6 +185,31 @@ func (b *Bot) Subscribers() []int64 {
 		return []int64{}
 	}
 	return subscribers
+}
+
+func (b *Bot) UpdateInterfaceForAll() {
+	subscribers := b.Subscribers()
+	text := "🔄 Бот обновлен! Новые возможности и улучшения уже доступны."
+	
+	for _, chatID := range subscribers {
+		keyboard := b.createMainKeyboard(chatID)
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = keyboard
+		
+		if _, err := b.api.Send(msg); err != nil {
+			b.log.WithError(err).WithFields(logger.Fields{
+				"chat_id": chatID,
+			}).Error("Failed to send interface update")
+		} else {
+			b.log.InfoWithFields("Interface updated", logger.Fields{
+				"chat_id": chatID,
+			})
+		}
+	}
+	
+	b.log.InfoWithFields("Interface update completed", logger.Fields{
+		"total_users": len(subscribers),
+	})
 }
 
 func (b *Bot) Notify(chatID int64, text string) error {
@@ -248,75 +294,32 @@ func (b *Bot) handleCurrentSlots(chatID int64) {
 	b.reply(chatID, text)
 }
 
-func (b *Bot) createMainKeyboard(chatID int64) tgbotapi.InlineKeyboardMarkup {
+func (b *Bot) createMainKeyboard(chatID int64) tgbotapi.ReplyKeyboardMarkup {
 	isSubscribed, err := b.storage.IsSubscribed(chatID)
 	if err != nil {
 		b.log.WithError(err).Error("Failed to check subscription status")
 		isSubscribed = false
 	}
 
-	var subscriptionButton tgbotapi.InlineKeyboardButton
+	var subscriptionText string
 	if isSubscribed {
-		subscriptionButton = tgbotapi.NewInlineKeyboardButtonData("🔕 Отписаться", "unsubscribe")
+		subscriptionText = "🔕 Отписаться"
 	} else {
-		subscriptionButton = tgbotapi.NewInlineKeyboardButtonData("🔔 Подписаться", "subscribe")
+		subscriptionText = "🔔 Подписаться"
 	}
 
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📅 Текущие слоты", "current"),
-			tgbotapi.NewInlineKeyboardButtonURL("📝 Записаться", b.bookingURL),
+	return tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("📅 Текущие слоты"),
+			tgbotapi.NewKeyboardButton("📝 Записаться"),
 		),
-		tgbotapi.NewInlineKeyboardRow(
-			subscriptionButton,
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(subscriptionText),
 		),
 	)
 }
 
-func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
-	chatID := callback.Message.Chat.ID
-	data := callback.Data
-
-	b.log.InfoWithFields("Received callback", logger.Fields{
-		"data":    data,
-		"chat_id": chatID,
-	})
-
-	// Answer callback to remove loading state
-	callbackAnswer := tgbotapi.NewCallback(callback.ID, "")
-	b.api.Request(callbackAnswer)
-
-	switch data {
-	case "current":
-		b.handleCurrentSlots(chatID)
-	case "subscribe":
-		b.addSubscriber(chatID)
-		subsCount := len(b.Subscribers())
-		b.log.InfoWithFields("User subscribed via button", logger.Fields{
-			"chat_id":           chatID,
-			"total_subscribers": subsCount,
-		})
-		b.sendWelcomeMessage(chatID)
-	case "unsubscribe":
-		b.removeSubscriber(chatID)
-		subsCount := len(b.Subscribers())
-		b.log.InfoWithFields("User unsubscribed via button", logger.Fields{
-			"chat_id":           chatID,
-			"total_subscribers": subsCount,
-		})
-		b.sendGoodbyeMessage(chatID)
-	case "stop": // Backward compatibility
-		b.removeSubscriber(chatID)
-		subsCount := len(b.Subscribers())
-		b.log.InfoWithFields("User unsubscribed via button", logger.Fields{
-			"chat_id":           chatID,
-			"total_subscribers": subsCount,
-		})
-		b.sendGoodbyeMessage(chatID)
-	default:
-		b.log.WarnWithFields("Unknown callback data", logger.Fields{
-			"data":    data,
-			"chat_id": chatID,
-		})
-	}
+func (b *Bot) handleBooking(chatID int64) {
+	text := "📝 Для записи перейдите по ссылке:\n\n" + b.bookingURL
+	b.reply(chatID, text)
 }
