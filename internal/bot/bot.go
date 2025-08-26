@@ -22,6 +22,7 @@ type Storage interface {
 	AddSubscriber(chatID int64) error
 	RemoveSubscriber(chatID int64) error
 	GetSubscribers() ([]int64, error)
+	IsSubscribed(chatID int64) (bool, error)
 }
 
 type TemplateRenderer interface {
@@ -196,7 +197,7 @@ func (b *Bot) sendWelcomeMessage(chatID int64) {
 	} else {
 		text = "🚗 Привет! Я бот автошколы Мото Город."
 	}
-	keyboard := b.createMainKeyboard()
+	keyboard := b.createMainKeyboard(chatID)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard
 	b.api.Send(msg)
@@ -209,14 +210,15 @@ func (b *Bot) sendGoodbyeMessage(chatID int64) {
 	} else {
 		text = "👋 Подписка отменена."
 	}
+	keyboard := b.createMainKeyboard(chatID)
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	msg.ReplyMarkup = keyboard
 	b.api.Send(msg)
 }
 
 func (b *Bot) sendHelpMessage(chatID int64) {
 	text := "ℹ️ Доступные команды:\n\n/start - подписаться на уведомления\n/current - показать текущие слоты\n/stop - отписаться от уведомлений"
-	keyboard := b.createMainKeyboard()
+	keyboard := b.createMainKeyboard(chatID)
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard
 	b.api.Send(msg)
@@ -246,14 +248,27 @@ func (b *Bot) handleCurrentSlots(chatID int64) {
 	b.reply(chatID, text)
 }
 
-func (b *Bot) createMainKeyboard() tgbotapi.InlineKeyboardMarkup {
+func (b *Bot) createMainKeyboard(chatID int64) tgbotapi.InlineKeyboardMarkup {
+	isSubscribed, err := b.storage.IsSubscribed(chatID)
+	if err != nil {
+		b.log.WithError(err).Error("Failed to check subscription status")
+		isSubscribed = false
+	}
+
+	var subscriptionButton tgbotapi.InlineKeyboardButton
+	if isSubscribed {
+		subscriptionButton = tgbotapi.NewInlineKeyboardButtonData("🔕 Отписаться", "unsubscribe")
+	} else {
+		subscriptionButton = tgbotapi.NewInlineKeyboardButtonData("🔔 Подписаться", "subscribe")
+	}
+
 	return tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("📅 Текущие слоты", "current"),
 			tgbotapi.NewInlineKeyboardButtonURL("📝 Записаться", b.bookingURL),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔕 Отписаться", "stop"),
+			subscriptionButton,
 		),
 	)
 }
@@ -274,7 +289,23 @@ func (b *Bot) handleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 	switch data {
 	case "current":
 		b.handleCurrentSlots(chatID)
-	case "stop":
+	case "subscribe":
+		b.addSubscriber(chatID)
+		subsCount := len(b.Subscribers())
+		b.log.InfoWithFields("User subscribed via button", logger.Fields{
+			"chat_id":           chatID,
+			"total_subscribers": subsCount,
+		})
+		b.sendWelcomeMessage(chatID)
+	case "unsubscribe":
+		b.removeSubscriber(chatID)
+		subsCount := len(b.Subscribers())
+		b.log.InfoWithFields("User unsubscribed via button", logger.Fields{
+			"chat_id":           chatID,
+			"total_subscribers": subsCount,
+		})
+		b.sendGoodbyeMessage(chatID)
+	case "stop": // Backward compatibility
 		b.removeSubscriber(chatID)
 		subsCount := len(b.Subscribers())
 		b.log.InfoWithFields("User unsubscribed via button", logger.Fields{

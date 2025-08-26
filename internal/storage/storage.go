@@ -93,6 +93,12 @@ func (s *Storage) MarkSlotSeen(slotKey string) error {
 	return err
 }
 
+func (s *Storage) IsSubscribed(chatID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM subscribers WHERE chat_id = ?)", chatID).Scan(&exists)
+	return exists, err
+}
+
 func (s *Storage) CleanOldSlots(olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 	_, err := s.db.Exec("DELETE FROM seen_slots WHERE created_at < ?", cutoff)
