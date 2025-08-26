@@ -46,7 +46,7 @@ docker-run: docker-build
 		--env-file .env \
 		-e LOG_LEVEL=$(LOG_LEVEL) \
 		-v $(PWD)/data:/data \
-		--restart unless-stopped \
+		--restart always \
 		$(IMAGE_NAME)
 	@echo "Container started with host data directory ./data. Use 'make docker-logs' to view logs."
 
