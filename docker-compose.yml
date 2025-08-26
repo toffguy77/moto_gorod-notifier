@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  notifier:
+    build: .
+    container_name: moto-gorod-notifier
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - notifier-network
+
+networks:
+  notifier-network:
+    driver: bridge
