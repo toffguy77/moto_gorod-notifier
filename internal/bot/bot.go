@@ -3,21 +3,25 @@ package bot
 import (
 	"context"
 	"strings"
-	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/thatguy/moto_gorod-notifier/internal/logger"
 )
 
-// Bot wraps Telegram bot operations and stores subscriptions in-memory.
+// Bot wraps Telegram bot operations and stores subscriptions in database.
 type Bot struct {
 	api          *tgbotapi.BotAPI
-	subsMu       sync.RWMutex
-	subscribers  map[int64]struct{}
 	log          *logger.Logger
 	currentSlotsFn func() ([]string, error)
 	bookingURL   string
 	templateRenderer TemplateRenderer
+	storage      Storage
+}
+
+type Storage interface {
+	AddSubscriber(chatID int64) error
+	RemoveSubscriber(chatID int64) error
+	GetSubscribers() ([]int64, error)
 }
 
 type TemplateRenderer interface {
@@ -26,7 +30,7 @@ type TemplateRenderer interface {
 	GetCurrentSlotsMessage(slots []string) string
 }
 
-func New(token string, log *logger.Logger) (*Bot, error) {
+func New(token string, storage Storage, log *logger.Logger) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
@@ -34,9 +38,9 @@ func New(token string, log *logger.Logger) (*Bot, error) {
 	
 	bot := &Bot{
 		api:         api,
-		subscribers: make(map[int64]struct{}),
 		log:         log,
 		bookingURL:  "https://n841217.yclients.com/",
+		storage:     storage,
 	}
 	
 	bot.log.InfoWithFields("Telegram bot initialized", logger.Fields{
@@ -141,25 +145,24 @@ func (b *Bot) reply(chatID int64, text string) {
 }
 
 func (b *Bot) addSubscriber(chatID int64) {
-	b.subsMu.Lock()
-	defer b.subsMu.Unlock()
-	b.subscribers[chatID] = struct{}{}
+	if err := b.storage.AddSubscriber(chatID); err != nil {
+		b.log.WithError(err).Error("Failed to add subscriber")
+	}
 }
 
 func (b *Bot) removeSubscriber(chatID int64) {
-	b.subsMu.Lock()
-	defer b.subsMu.Unlock()
-	delete(b.subscribers, chatID)
+	if err := b.storage.RemoveSubscriber(chatID); err != nil {
+		b.log.WithError(err).Error("Failed to remove subscriber")
+	}
 }
 
 func (b *Bot) Subscribers() []int64 {
-	b.subsMu.RLock()
-	defer b.subsMu.RUnlock()
-	ids := make([]int64, 0, len(b.subscribers))
-	for id := range b.subscribers {
-		ids = append(ids, id)
+	subscribers, err := b.storage.GetSubscribers()
+	if err != nil {
+		b.log.WithError(err).Error("Failed to get subscribers")
+		return []int64{}
 	}
-	return ids
+	return subscribers
 }
 
 func (b *Bot) Notify(chatID int64, text string) error {

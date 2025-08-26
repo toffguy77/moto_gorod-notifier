@@ -23,12 +23,18 @@ type Notifier struct {
 	bot       *bot.Bot
 	yc        *yclients.Client
 	opts      Options
-	seen      map[string]struct{}
 	templates map[string]*template.Template
 	log       *logger.Logger
+	storage   Storage
 }
 
-func New(b *bot.Bot, yc *yclients.Client, opts Options, log *logger.Logger) *Notifier {
+type Storage interface {
+	IsSlotSeen(slotKey string) (bool, error)
+	MarkSlotSeen(slotKey string) error
+	CleanOldSlots(olderThan time.Duration) error
+}
+
+func New(b *bot.Bot, yc *yclients.Client, opts Options, storage Storage, log *logger.Logger) *Notifier {
 	if opts.Interval <= 0 {
 		opts.Interval = 30 * time.Second
 	}
@@ -36,9 +42,9 @@ func New(b *bot.Bot, yc *yclients.Client, opts Options, log *logger.Logger) *Not
 		bot:       b,
 		yc:        yc,
 		opts:      opts,
-		seen:      make(map[string]struct{}),
 		templates: make(map[string]*template.Template),
 		log:       log,
+		storage:   storage,
 	}
 	
 	// Parse all templates
@@ -167,11 +173,18 @@ func (n *Notifier) checkAndNotify(ctx context.Context) {
 				for _, t := range times {
 					totalChecks++
 					key := n.buildKey(serviceID, staffID, t)
-					if _, ok := n.seen[key]; ok {
+					seen, err := n.storage.IsSlotSeen(key)
+					if err != nil {
+						n.log.WithError(err).Error("Failed to check if slot seen")
+						continue
+					}
+					if seen {
 						continue
 					}
 					
-					n.seen[key] = struct{}{}
+					if err := n.storage.MarkSlotSeen(key); err != nil {
+						n.log.WithError(err).Error("Failed to mark slot as seen")
+					}
 					newSlotsFound++
 					
 					n.log.InfoWithFields("New slot found", logger.Fields{
@@ -204,11 +217,15 @@ func (n *Notifier) checkAndNotify(ctx context.Context) {
 	}
 	
 	duration := time.Since(start)
+	// Clean old slots (older than 7 days)
+	if err := n.storage.CleanOldSlots(7 * 24 * time.Hour); err != nil {
+		n.log.WithError(err).Warn("Failed to clean old slots")
+	}
+	
 	n.log.InfoWithFields("Slot availability check completed", logger.Fields{
 		"duration":        duration.String(),
 		"new_slots_found": newSlotsFound,
 		"total_checks":    totalChecks,
-		"seen_slots":      len(n.seen),
 	})
 }
 

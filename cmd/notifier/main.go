@@ -14,6 +14,7 @@ import (
 	"github.com/thatguy/moto_gorod-notifier/internal/config"
 	"github.com/thatguy/moto_gorod-notifier/internal/logger"
 	"github.com/thatguy/moto_gorod-notifier/internal/notifier"
+	"github.com/thatguy/moto_gorod-notifier/internal/storage"
 	"github.com/thatguy/moto_gorod-notifier/internal/yclients"
 )
 
@@ -76,8 +77,16 @@ func main() {
 		log.Warn("No service IDs configured, skipping authentication test")
 	}
 
+	// Initialize storage
+	store, err := storage.New("/data/notifier.db", log.WithField("component", "storage"))
+	if err != nil {
+		log.WithError(err).Error("Failed to initialize storage")
+		os.Exit(1)
+	}
+	defer store.Close()
+
 	// Initialize Telegram bot
-	tg, err := bot.New(cfg.TelegramToken, log.WithField("component", "telegram_bot"))
+	tg, err := bot.New(cfg.TelegramToken, store, log.WithField("component", "telegram_bot"))
 	if err != nil {
 		log.WithError(err).Error("Failed to initialize Telegram bot")
 		os.Exit(1)
@@ -94,7 +103,7 @@ func main() {
 		Timezone:   cfg.Timezone,
 		LocationID: companyIDInt,
 		ServiceIDs: cfg.ServiceIDs,
-	}, log.WithField("component", "notifier"))
+	}, store, log.WithField("component", "notifier"))
 
 	// Set template renderer for bot
 	tg.SetTemplateRenderer(n)

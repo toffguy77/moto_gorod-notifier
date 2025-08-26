@@ -44,9 +44,10 @@ docker-run: docker-build
 		--name $(CONTAINER_NAME) \
 		--env-file .env \
 		-e LOG_LEVEL=$(LOG_LEVEL) \
+		-v $(CONTAINER_NAME)-data:/data \
 		--restart unless-stopped \
 		$(IMAGE_NAME)
-	@echo "Container started. Use 'make docker-logs' to view logs."
+	@echo "Container started with persistent storage. Use 'make docker-logs' to view logs."
 
 docker-stop:
 	@echo "Stopping container..."
@@ -97,6 +98,17 @@ test-docker-shutdown: docker-run
 
 all: deps fmt vet test build
 
+# === Migration ===
+migrate-logs:
+	@echo "Migrating from logs to SQLite..."
+	@if [ -z "$(LOGS)" ]; then \
+		echo "Usage: make migrate-logs LOGS=path/to/logfile.log [DB=path/to/db]"; \
+		exit 1; \
+	fi
+	@DB_PATH=$${DB:-./migrated.db}; \
+	go run scripts/migrate_from_logs.go -logs="$(LOGS)" -db="$$DB_PATH"; \
+	echo "Migration completed. Database: $$DB_PATH"
+
 # === Help ===
 help:
 	@echo "Available commands:"
@@ -113,6 +125,9 @@ help:
 	@echo "    make docker-logs    - View container logs"
 	@echo "    make docker-status  - Show container status"
 	@echo "    make docker-clean   - Stop and remove all Docker resources"
+	@echo ""
+	@echo "  Migration:"
+	@echo "    make migrate-logs LOGS=old.log - Migrate data from logs to SQLite"
 	@echo ""
 	@echo "  Testing:"
 	@echo "    make test-shutdown  - Test graceful shutdown (local)"

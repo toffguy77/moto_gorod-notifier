@@ -10,8 +10,11 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/notifier ./cmd/notifier
+# Install build dependencies for SQLite
+RUN apk add --no-cache gcc musl-dev sqlite-dev
+
+# Build the application with CGO enabled for SQLite
+RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o bin/notifier ./cmd/notifier
 
 # Final stage
 FROM alpine:latest
@@ -21,6 +24,9 @@ RUN apk --no-cache add ca-certificates tzdata
 
 # Create non-root user and home directory
 RUN adduser -D -s /bin/sh notifier
+
+# Create data directory for SQLite
+RUN mkdir -p /data && chown notifier:notifier /data
 
 WORKDIR /home/notifier
 
@@ -34,5 +40,8 @@ USER notifier
 
 # Expose port (if needed for health checks)
 EXPOSE 8080
+
+# Mount point for persistent data
+VOLUME ["/data"]
 
 CMD ["./notifier"]
