@@ -1,2 +1,0 @@
-{"timestamp":"2025-08-26T10:08:59.190459186Z","level":"INFO","message":"User subscribed","chat_id":123456789}
-{"timestamp":"2025-08-26T10:08:59.191022261Z","level":"INFO","message":"New slot found","service_id":15728488,"staff_id":2311362,"time":"2025-08-30T11:00:00+03:00"}

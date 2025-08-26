@@ -38,16 +38,17 @@ docker-build:
 
 docker-run: docker-build
 	@echo "Starting container with LOG_LEVEL=$(LOG_LEVEL)..."
+	@mkdir -p ./data
 	@docker stop $(CONTAINER_NAME) 2>/dev/null || true
 	@docker rm $(CONTAINER_NAME) 2>/dev/null || true
 	docker run -d \
 		--name $(CONTAINER_NAME) \
 		--env-file .env \
 		-e LOG_LEVEL=$(LOG_LEVEL) \
-		-v $(CONTAINER_NAME)-data:/data \
+		-v $(PWD)/data:/data \
 		--restart unless-stopped \
 		$(IMAGE_NAME)
-	@echo "Container started with persistent storage. Use 'make docker-logs' to view logs."
+	@echo "Container started with host data directory ./data. Use 'make docker-logs' to view logs."
 
 docker-stop:
 	@echo "Stopping container..."
@@ -66,6 +67,7 @@ docker-clean: docker-stop
 	@echo "Cleaning up Docker resources..."
 	docker rmi $(IMAGE_NAME) 2>/dev/null || true
 	docker system prune -f
+	@echo "Note: ./data directory preserved on host"
 
 # === Development Helpers ===
 dev: fmt vet build
