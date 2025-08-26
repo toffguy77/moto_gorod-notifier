@@ -25,8 +25,8 @@ RUN apk --no-cache add ca-certificates tzdata
 # Create non-root user and home directory
 RUN adduser -D -s /bin/sh notifier
 
-# Create data directory for SQLite
-RUN mkdir -p /data && chown notifier:notifier /data
+# Create data directory for SQLite with proper permissions
+RUN mkdir -p /data && chown notifier:notifier /data && chmod 755 /data
 
 WORKDIR /home/notifier
 

@@ -193,15 +193,7 @@ func (b *Bot) UpdateInterfaceForAll() {
 	for _, chatID := range subscribers {
 		keyboard := b.createMainKeyboard(chatID)
 		
-		// Silent keyboard update using setChatMenuButton
-		setMenuButton := tgbotapi.SetChatMenuButtonConfig{
-			ChatID: chatID,
-			MenuButton: &tgbotapi.MenuButton{
-				Type: "default",
-			},
-		}
-		
-		// Force keyboard update by sending a message and immediately deleting it
+		// Send temporary message with new keyboard and delete it
 		msg := tgbotapi.NewMessage(chatID, "⚡")
 		msg.ReplyMarkup = keyboard
 		
@@ -216,9 +208,6 @@ func (b *Bot) UpdateInterfaceForAll() {
 		// Immediately delete the message
 		deleteMsg := tgbotapi.NewDeleteMessage(chatID, sentMsg.MessageID)
 		b.api.Request(deleteMsg)
-		
-		// Also try to set menu button
-		b.api.Request(setMenuButton)
 		
 		b.log.InfoWithFields("Interface silently updated", logger.Fields{
 			"chat_id": chatID,
