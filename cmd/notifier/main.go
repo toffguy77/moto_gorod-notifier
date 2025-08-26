@@ -140,8 +140,8 @@ func main() {
 	// Start metrics HTTP server
 	go func() {
 		http.Handle("/metrics", metrics.Handler())
-		log.Info("Starting metrics server on :9090")
-		if err := http.ListenAndServe(":9090", nil); err != nil {
+		log.Info("Starting metrics server on :19092")
+		if err := http.ListenAndServe(":19092", nil); err != nil {
 			log.WithError(err).Error("Metrics server failed")
 		}
 	}()
