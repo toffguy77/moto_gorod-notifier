@@ -46,6 +46,7 @@ func (s *Storage) migrate() error {
 			chat_id INTEGER PRIMARY KEY,
 			first_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`INSERT OR IGNORE INTO unique_users (chat_id) SELECT chat_id FROM subscribers`,
 	}
 
 	for _, query := range queries {
