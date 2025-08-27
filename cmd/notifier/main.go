@@ -137,10 +137,7 @@ func main() {
 	// Set initial metrics from database stats
 	metrics.SetActiveSubscribers(float64(subscriberCount))
 	metrics.SetSeenSlotsTotal(float64(seenSlotsCount))
-	// Initialize unique users counter from database
-	for i := 0; i < uniqueUsersCount; i++ {
-		metrics.RecordUniqueUser()
-	}
+	metrics.SetUniqueUsersTotal(float64(uniqueUsersCount))
 
 	// Start metrics HTTP server
 	go func() {

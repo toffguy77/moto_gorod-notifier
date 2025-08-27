@@ -11,7 +11,7 @@ type Metrics struct {
 	// Counters
 	SubscriptionsTotal   prometheus.Counter
 	UnsubscriptionsTotal prometheus.Counter
-	UniqueUsersTotal     prometheus.Counter
+	UniqueUsersTotal     prometheus.Gauge
 	NewSlotsTotal        prometheus.Counter
 	NotificationsSent    prometheus.Counter
 	ErrorsTotal          *prometheus.CounterVec
@@ -35,7 +35,7 @@ func New() *Metrics {
 			Name: "moto_gorod_unsubscriptions_total",
 			Help: "Total number of user unsubscriptions",
 		}),
-		UniqueUsersTotal: prometheus.NewCounter(prometheus.CounterOpts{
+		UniqueUsersTotal: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "moto_gorod_unique_users_total",
 			Help: "Total number of unique users who interacted with bot",
 		}),
@@ -102,6 +102,10 @@ func (m *Metrics) RecordUnsubscription() {
 
 func (m *Metrics) RecordUniqueUser() {
 	m.UniqueUsersTotal.Inc()
+}
+
+func (m *Metrics) SetUniqueUsersTotal(count float64) {
+	m.UniqueUsersTotal.Set(count)
 }
 
 func (m *Metrics) RecordNewSlot() {
