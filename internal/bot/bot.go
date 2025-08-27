@@ -33,6 +33,7 @@ type Storage interface {
 	RemoveSubscriber(chatID int64) error
 	GetSubscribers() ([]int64, error)
 	IsSubscribed(chatID int64) (bool, error)
+	AddUniqueUser(chatID int64) error
 }
 
 type TemplateRenderer interface {
