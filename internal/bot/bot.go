@@ -109,8 +109,10 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		switch command {
 		case "start":
 			// Record unique user on first interaction
-			if b.metrics != nil {
-				b.metrics.RecordUniqueUser()
+			if err := b.storage.AddUniqueUser(chatID); err == nil {
+				if b.metrics != nil {
+					b.metrics.RecordUniqueUser()
+				}
 			}
 			b.addSubscriber(chatID)
 			subsCount := len(b.Subscribers())

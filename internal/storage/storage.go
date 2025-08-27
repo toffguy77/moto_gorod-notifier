@@ -42,6 +42,10 @@ func (s *Storage) migrate() error {
 			slot_key TEXT PRIMARY KEY,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS unique_users (
+			chat_id INTEGER PRIMARY KEY,
+			first_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, query := range queries {
@@ -105,16 +109,31 @@ func (s *Storage) CleanOldSlots(olderThan time.Duration) error {
 	return err
 }
 
-func (s *Storage) GetStats() (subscriberCount int, seenSlotsCount int, err error) {
+func (s *Storage) AddUniqueUser(chatID int64) error {
+	_, err := s.db.Exec("INSERT OR IGNORE INTO unique_users (chat_id) VALUES (?)", chatID)
+	return err
+}
+
+func (s *Storage) GetUniqueUsersCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM unique_users").Scan(&count)
+	return count, err
+}
+
+func (s *Storage) GetStats() (subscriberCount int, seenSlotsCount int, uniqueUsersCount int, err error) {
 	err = s.db.QueryRow("SELECT COUNT(*) FROM subscribers").Scan(&subscriberCount)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	err = s.db.QueryRow("SELECT COUNT(*) FROM seen_slots").Scan(&seenSlotsCount)
 	if err != nil {
-		return subscriberCount, 0, err
+		return subscriberCount, 0, 0, err
 	}
-	return subscriberCount, seenSlotsCount, nil
+	err = s.db.QueryRow("SELECT COUNT(*) FROM unique_users").Scan(&uniqueUsersCount)
+	if err != nil {
+		return subscriberCount, seenSlotsCount, 0, err
+	}
+	return subscriberCount, seenSlotsCount, uniqueUsersCount, nil
 }
 
 func (s *Storage) Close() error {

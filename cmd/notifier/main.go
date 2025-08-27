@@ -88,13 +88,14 @@ func main() {
 	defer store.Close()
 
 	// Show startup statistics
-	subscriberCount, seenSlotsCount, err := store.GetStats()
+	subscriberCount, seenSlotsCount, uniqueUsersCount, err := store.GetStats()
 	if err != nil {
 		log.WithError(err).Warn("Failed to get startup statistics")
 	} else {
 		log.InfoWithFields("Database statistics", logger.Fields{
-			"subscribers": subscriberCount,
-			"seen_slots":  seenSlotsCount,
+			"subscribers":   subscriberCount,
+			"seen_slots":    seenSlotsCount,
+			"unique_users":  uniqueUsersCount,
 		})
 	}
 
@@ -136,6 +137,10 @@ func main() {
 	// Set initial metrics from database stats
 	metrics.SetActiveSubscribers(float64(subscriberCount))
 	metrics.SetSeenSlotsTotal(float64(seenSlotsCount))
+	// Initialize unique users counter from database
+	for i := 0; i < uniqueUsersCount; i++ {
+		metrics.RecordUniqueUser()
+	}
 
 	// Start metrics HTTP server
 	go func() {
